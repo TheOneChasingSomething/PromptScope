@@ -1,0 +1,823 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>analyze_jsonl — viewer</title>
+<style>
+  :root {
+    --bg: #0d1117; --panel: #161b22; --border: #30363d;
+    --text: #c9d1d9; --dim: #8b949e; --accent: #58a6ff;
+    --yellow: #d29922; --green: #3fb950; --magenta: #d2a8ff; --red: #f85149; --cyan: #39c5cf;
+  }
+  @media (prefers-color-scheme: light) {
+    :root {
+      --bg: #ffffff; --panel: #f6f8fa; --border: #d0d7de;
+      --text: #24292f; --dim: #57606a; --accent: #0969da;
+      --yellow: #9a6700; --green: #1a7f37; --magenta: #8250df; --red: #cf222e; --cyan: #1b7c83;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0d1117; --panel: #161b22; --border: #30363d;
+    --text: #c9d1d9; --dim: #8b949e; --accent: #58a6ff;
+    --yellow: #d29922; --green: #3fb950; --magenta: #d2a8ff; --red: #f85149; --cyan: #39c5cf;
+  }
+  :root[data-theme="light"] {
+    --bg: #ffffff; --panel: #f6f8fa; --border: #d0d7de;
+    --text: #24292f; --dim: #57606a; --accent: #0969da;
+    --yellow: #9a6700; --green: #1a7f37; --magenta: #8250df; --red: #cf222e; --cyan: #1b7c83;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 14px; line-height: 1.5;
+  }
+  header {
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    padding: 12px 16px; border-bottom: 1px solid var(--border);
+    position: sticky; top: 0; background: var(--bg); z-index: 10;
+  }
+  header h1 { font-size: 15px; margin: 0; white-space: nowrap; }
+  header input[type=text] {
+    background: var(--panel); border: 1px solid var(--border); color: var(--text);
+    padding: 6px 8px; border-radius: 6px; font-family: inherit; font-size: 13px;
+    min-width: 220px; flex: 1;
+  }
+  header select {
+    background: var(--panel); border: 1px solid var(--border); color: var(--text);
+    padding: 6px 8px; border-radius: 6px; font-family: inherit; font-size: 13px;
+    cursor: pointer;
+  }
+  button {
+    background: var(--panel); border: 1px solid var(--border); color: var(--text);
+    padding: 6px 12px; border-radius: 6px; font-family: inherit; font-size: 13px;
+    cursor: pointer;
+  }
+  button:hover { border-color: var(--accent); }
+  #status { font-size: 12px; white-space: nowrap; }
+  .ok { color: var(--green); }
+  .ko { color: var(--red); }
+  main { display: flex; height: calc(100vh - 53px); overflow: hidden; }
+  #sidebar {
+    width: 340px; min-width: 240px; border-right: 1px solid var(--border);
+    overflow-y: auto; flex-shrink: 0;
+  }
+  #content { flex: 1; overflow-y: auto; padding: 16px 20px; }
+  .section-title {
+    padding: 10px 14px 4px; font-size: 11px; text-transform: uppercase;
+    letter-spacing: .05em; color: var(--dim);
+  }
+  .summary-box {
+    margin: 0 14px 12px; padding: 10px; background: var(--panel);
+    border: 1px solid var(--border); border-radius: 8px; font-size: 12px;
+  }
+  .summary-box div { display: flex; justify-content: space-between; padding: 1px 0; }
+  .session-item {
+    padding: 8px 14px; cursor: pointer; border-left: 3px solid transparent;
+    border-bottom: 1px solid var(--border);
+  }
+  .session-item:hover { background: var(--panel); }
+  .session-item.active { border-left-color: var(--accent); background: var(--panel); }
+  .session-item .sid { color: var(--accent); font-weight: bold; }
+  .session-item .meta { color: var(--dim); font-size: 11px; margin-top: 2px; }
+  .badge {
+    display: inline-block; font-size: 10px; padding: 0 5px; border-radius: 4px;
+    border: 1px solid var(--border); margin-left: 6px;
+  }
+  .badge.yes { color: var(--green); border-color: var(--green); }
+  .badge.no { color: var(--dim); }
+  .placeholder { color: var(--dim); padding: 40px; text-align: center; }
+  .toolbar {
+    display: flex; gap: 8px; align-items: center; margin-bottom: 14px; flex-wrap: wrap;
+  }
+  .toolbar input[type=text] {
+    background: var(--panel); border: 1px solid var(--border); color: var(--text);
+    padding: 5px 8px; border-radius: 6px; font-family: inherit; font-size: 12px; width: 140px;
+  }
+  .toolbar label { font-size: 12px; color: var(--dim); display: flex; align-items: center; gap: 4px; }
+  .session-info { margin-bottom: 14px; }
+  .session-path {
+    font-size: 11px; color: var(--dim); word-break: break-all; margin-bottom: 8px;
+  }
+  .session-path .label { color: var(--dim); }
+  .token-stats { display: flex; gap: 8px; flex-wrap: wrap; }
+  .token-chip {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 6px;
+    padding: 4px 10px; font-size: 11px; color: var(--dim); cursor: help;
+  }
+  .token-chip b { color: var(--text); font-size: 12px; }
+  .token-chip.total { border-color: var(--accent); }
+  .token-chip.total b { color: var(--accent); }
+  .turn { margin-bottom: 18px; }
+  .turn-head { font-size: 12px; color: var(--dim); margin-bottom: 4px; }
+  .turn-head .who { font-weight: bold; }
+  .who.human { color: var(--yellow); }
+  .who.assistant { color: var(--green); }
+  .who.command { color: var(--cyan); }
+  .bubble {
+    position: relative;
+    border: 1px solid var(--border); border-radius: 8px; padding: 10px 34px 10px 12px;
+    background: var(--panel); white-space: pre-wrap; word-break: break-word;
+  }
+  .copy-btn {
+    position: absolute; top: 6px; right: 6px;
+    width: 22px; height: 22px; padding: 0; border-radius: 4px;
+    display: flex; align-items: center; justify-content: center;
+    background: transparent; border: 1px solid transparent; color: var(--dim);
+    opacity: 0; transition: opacity .15s, color .15s, border-color .15s; cursor: pointer;
+  }
+  .bubble:hover .copy-btn, .block:hover .copy-btn { opacity: 1; }
+  .copy-btn:hover { background: var(--bg); border-color: var(--border); color: var(--accent); }
+  .copy-btn.copied { color: var(--green); opacity: 1; }
+  .block { margin-bottom: 8px; }
+  .block:last-child { margin-bottom: 0; }
+  .block-thinking {
+    border-left: 3px solid var(--magenta); padding: 6px 10px; color: var(--dim);
+    font-style: italic; white-space: pre-wrap; word-break: break-word;
+  }
+  .block-tool {
+    border: 1px solid var(--border); border-radius: 6px; overflow: hidden;
+  }
+  .block-tool .tool-head {
+    background: rgba(88,166,255,.1); color: var(--accent); padding: 5px 10px;
+    font-size: 12px; font-weight: bold; cursor: pointer; display: flex; justify-content: space-between;
+  }
+  .block-tool .tool-body { padding: 8px 10px; display: none; }
+  .block-tool.open .tool-body { display: block; }
+  .tool-input {
+    white-space: pre-wrap; word-break: break-word; margin: 0 0 6px; color: var(--text);
+  }
+  .tool-output {
+    white-space: pre-wrap; word-break: break-word; color: var(--dim);
+    border-top: 1px dashed var(--border); padding-top: 6px; max-height: 400px; overflow-y: auto;
+  }
+  a { color: var(--accent); }
+  .nav-controls {
+    position: fixed; right: 24px; bottom: 24px;
+    display: flex; flex-direction: column; gap: 6px; z-index: 20;
+  }
+  .nav-controls button {
+    width: 38px; height: 38px; padding: 0; border-radius: 50%;
+    font-size: 15px; line-height: 1; display: flex; align-items: center; justify-content: center;
+    background: var(--panel); border: 1px solid var(--border); color: var(--text);
+    box-shadow: 0 2px 8px rgba(0,0,0,.25);
+  }
+  .nav-controls button:hover { border-color: var(--accent); color: var(--accent); }
+
+  /* ── Coûts ── */
+  .cost-badge {
+    display: inline-block; font-size: 10px; padding: 1px 6px; border-radius: 4px;
+    border: 1px solid var(--border); white-space: nowrap;
+  }
+  .turn-cost { font-size: 11px; color: var(--dim); margin-bottom: 4px; }
+  .turn-cost b { color: var(--text); }
+  .cost-dash { max-width: 940px; }
+  .cost-dash h2 { font-size: 15px; margin: 0 0 12px; }
+  .cost-kpis { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
+  .kpi {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 8px;
+    padding: 10px 14px; min-width: 110px;
+  }
+  .kpi .k-label { font-size: 10px; color: var(--dim); text-transform: uppercase; letter-spacing: .04em; }
+  .kpi .k-val { font-size: 18px; font-weight: bold; margin-top: 2px; }
+  .kpi.total .k-val { color: var(--green); }
+  table.cost-table { border-collapse: collapse; width: 100%; margin-bottom: 20px; font-size: 12px; }
+  table.cost-table th, table.cost-table td { border-bottom: 1px solid var(--border); padding: 6px 10px; text-align: left; }
+  table.cost-table th {
+    color: var(--dim); font-weight: normal; text-transform: uppercase;
+    font-size: 10px; letter-spacing: .04em;
+  }
+  table.cost-table td.num, table.cost-table th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  table.cost-table .sid { color: var(--accent); font-weight: bold; }
+  .cost-h { font-size: 13px; font-weight: bold; margin: 14px 0 6px; }
+  .pricing-note { font-size: 11px; color: var(--dim); margin-bottom: 12px; }
+  .pricing-note.warn { color: var(--yellow); }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>analyze_jsonl</h1>
+  <input id="apiBase" type="text" value="http://127.0.0.1:8765" spellcheck="false">
+  <select id="sourceSelect">
+    <option value="claude">claude (live)</option>
+    <option value="backup">backup</option>
+  </select>
+  <button id="connectBtn"></button>
+  <button id="costBtn"></button>
+  <span id="status"></span>
+</header>
+
+<main>
+  <div id="sidebar">
+    <div id="summaryTitle" class="section-title"></div>
+    <div id="summaryBox" class="summary-box">—</div>
+    <div id="sessionsTitle" class="section-title"></div>
+    <div id="sessionList"></div>
+  </div>
+  <div id="content">
+    <div id="initialPlaceholder" class="placeholder"></div>
+  </div>
+</main>
+
+<script>
+// La langue de l'interface est pilotée côté serveur par le champ "language"
+// de analyze_jsonl_config.json (servi via GET /config) — pas de sélecteur ici.
+const I18N = {
+  fr: {
+    connect: 'Connecter',
+    connecting: 'connexion...',
+    connected: '● connecté',
+    notConnected: 'non connecté',
+    summary: 'Résumé',
+    sessionsTitle: 'Sessions',
+    selectSessionPlaceholder: 'Sélectionnez une session à gauche.',
+    records: 'Enregistrements',
+    period: 'Période',
+    noTranscript: 'Pas de fichier de transcript pour cette session.',
+    toolLabel: 'Outil :',
+    toolPlaceholder: 'Bash, Read, ...',
+    hideOutputs: 'masquer les outputs',
+    reload: 'Recharger',
+    loading: 'Chargement...',
+    noTurns: 'Aucun tour à afficher (filtre trop restrictif ?).',
+    error: 'Erreur : ',
+    human: 'HUMAIN',
+    commandOutput: '→ sortie commande',
+    thinkingEncrypted: "[thinking — non exposé par l'API]",
+    fileLabel: 'Fichier :',
+    badgeTranscript: 'transcript',
+    badgeNoTranscript: 'pas de détail',
+    promptCount: (n) => `${n} prompt${n > 1 ? 's' : ''}`,
+    sourceSelectTitle: 'Dossier de sessions interrogé',
+    truncated: '\n… (tronqué)',
+    tokenTotal: 'total',
+    tokenInput: 'input',
+    tokenOutput: 'output',
+    tokenCacheRead: 'cache read',
+    tokenCacheWrite: 'cache write',
+    tokenTotalTitle: 'Somme de tous les tokens comptabilisés pour cette session (input + output + cache read + cache write).',
+    tokenInputTitle: "Tokens de prompt envoyés au modèle et non servis depuis le cache (nouveau contexte facturé au tarif plein).",
+    tokenOutputTitle: "Tokens générés par le modèle en réponse (le texte, le thinking et les appels d'outils produits par l'assistant).",
+    tokenCacheReadTitle: "Tokens réutilisés depuis le cache de contexte (prompt déjà vu lors d'un appel précédent, facturés moins cher que l'input classique).",
+    tokenCacheWriteTitle: "Tokens écrits dans le cache lors de la création d'une nouvelle entrée (première fois qu'un bloc de contexte est mis en cache, coût légèrement supérieur à l'input classique).",
+    navPrev: 'Prompt précédent',
+    navNext: 'Prompt suivant',
+    navEnd: 'Aller à la fin de la conversation',
+    copy: 'Copier',
+    copied: 'Copié !',
+    costs: 'Coûts',
+    costsTitle: 'Coûts par type de question',
+    kpiCost: 'Coût total',
+    kpiQuestions: 'Questions',
+    kpiTokens: 'Tokens',
+    kpiAgents: 'Agents',
+    kpiCommands: 'Commandes',
+    kpiSessions: 'Sessions',
+    byType: 'Par type de question',
+    byModel: 'Par modèle',
+    bySession: 'Par session',
+    colType: 'Type', colModel: 'Modèle', colSession: 'Session',
+    colTurns: 'Questions', colTokens: 'Tokens', colCost: 'Coût (USD)',
+    colAgents: 'Agents', colCommands: 'Cmd',
+    costInOut: (i, o) => `Répartition : input $${(i || 0).toFixed(4)} / output $${(o || 0).toFixed(4)}`,
+    pricingConfig: 'Tarifs issus de la configuration (analyze_jsonl_config.json).',
+    pricingDefault: 'Tarifs par défaut (exemples) — ajuste-les dans analyze_jsonl_config.json → « pricing ».',
+    turnCostTitle: 'Coût estimé de cette question (tokens × tarif du modèle).',
+    locale: 'fr-FR',
+  },
+  en: {
+    connect: 'Connect',
+    connecting: 'connecting...',
+    connected: '● connected',
+    notConnected: 'not connected',
+    summary: 'Summary',
+    sessionsTitle: 'Sessions',
+    selectSessionPlaceholder: 'Select a session on the left.',
+    records: 'Records',
+    period: 'Period',
+    noTranscript: 'No transcript file for this session.',
+    toolLabel: 'Tool:',
+    toolPlaceholder: 'Bash, Read, ...',
+    hideOutputs: 'hide outputs',
+    reload: 'Reload',
+    loading: 'Loading...',
+    noTurns: 'No turns to display (filter too restrictive?).',
+    error: 'Error: ',
+    human: 'HUMAN',
+    commandOutput: '→ command output',
+    thinkingEncrypted: '[thinking — not exposed by the API]',
+    fileLabel: 'File:',
+    badgeTranscript: 'transcript',
+    badgeNoTranscript: 'no transcript',
+    promptCount: (n) => `${n} prompt${n > 1 ? 's' : ''}`,
+    sourceSelectTitle: 'Session directory being queried',
+    truncated: '\n… (truncated)',
+    tokenTotal: 'total',
+    tokenInput: 'input',
+    tokenOutput: 'output',
+    tokenCacheRead: 'cache read',
+    tokenCacheWrite: 'cache write',
+    tokenTotalTitle: 'Sum of all tokens counted for this session (input + output + cache read + cache write).',
+    tokenInputTitle: 'Prompt tokens sent to the model and not served from cache (new context billed at full rate).',
+    tokenOutputTitle: 'Tokens generated by the model in response (text, thinking, and tool calls produced by the assistant).',
+    tokenCacheReadTitle: 'Tokens reused from the context cache (prompt already seen in a previous call, billed cheaper than regular input).',
+    tokenCacheWriteTitle: 'Tokens written to the cache when creating a new entry (first time a context block is cached, slightly costlier than regular input).',
+    navPrev: 'Previous prompt',
+    navNext: 'Next prompt',
+    navEnd: 'Jump to end of conversation',
+    copy: 'Copy',
+    copied: 'Copied!',
+    costs: 'Costs',
+    costsTitle: 'Cost by question type',
+    kpiCost: 'Total cost',
+    kpiQuestions: 'Questions',
+    kpiTokens: 'Tokens',
+    kpiAgents: 'Agents',
+    kpiCommands: 'Commands',
+    kpiSessions: 'Sessions',
+    byType: 'By question type',
+    byModel: 'By model',
+    bySession: 'By session',
+    colType: 'Type', colModel: 'Model', colSession: 'Session',
+    colTurns: 'Questions', colTokens: 'Tokens', colCost: 'Cost (USD)',
+    colAgents: 'Agents', colCommands: 'Cmd',
+    costInOut: (i, o) => `Split: input $${(i || 0).toFixed(4)} / output $${(o || 0).toFixed(4)}`,
+    pricingConfig: 'Rates from configuration (analyze_jsonl_config.json).',
+    pricingDefault: 'Default (example) rates — adjust them in analyze_jsonl_config.json → "pricing".',
+    turnCostTitle: 'Estimated cost of this question (tokens × model rate).',
+    locale: 'en-US',
+  },
+};
+
+// Étiquettes et couleurs des types de question (indépendantes de l'i18n serveur).
+const CATEGORY_LABELS = {
+  fr: {
+    code_writing: 'écriture de code', code_analysis: 'analyse de code',
+    technical_conversation: 'conversation technique', tool_onboarding: 'prise en main / doc',
+    web_deepsearch: 'deepsearch web', agent_launch: "lancement d'agents",
+  },
+  en: {
+    code_writing: 'code writing', code_analysis: 'code analysis',
+    technical_conversation: 'technical conversation', tool_onboarding: 'tool onboarding / docs',
+    web_deepsearch: 'web deep search', agent_launch: 'agent launch',
+  },
+};
+const CATEGORY_COLORS = {
+  code_writing: 'var(--green)', code_analysis: 'var(--cyan)',
+  technical_conversation: 'var(--dim)', tool_onboarding: 'var(--yellow)',
+  web_deepsearch: 'var(--accent)', agent_launch: 'var(--magenta)',
+};
+function catLabel(c) { return (CATEGORY_LABELS[lang] && CATEGORY_LABELS[lang][c]) || c; }
+function catColor(c) { return CATEGORY_COLORS[c] || 'var(--dim)'; }
+
+let lang = 'fr';
+function t(key) {
+  return (I18N[lang] && I18N[lang][key] !== undefined) ? I18N[lang][key] : I18N.fr[key];
+}
+
+const $ = (sel) => document.querySelector(sel);
+const apiBaseInput = $('#apiBase');
+const sourceSelect = $('#sourceSelect');
+const connectBtn = $('#connectBtn');
+const statusEl = $('#status');
+const summaryTitle = $('#summaryTitle');
+const summaryBox = $('#summaryBox');
+const sessionsTitle = $('#sessionsTitle');
+const sessionList = $('#sessionList');
+const content = $('#content');
+const initialPlaceholder = $('#initialPlaceholder');
+
+let activeSessionId = null;
+
+function applyStaticUI() {
+  document.documentElement.lang = lang;
+  connectBtn.textContent = t('connect');
+  statusEl.textContent = t('notConnected');
+  summaryTitle.textContent = t('summary');
+  sessionsTitle.textContent = t('sessionsTitle');
+  initialPlaceholder.textContent = t('selectSessionPlaceholder');
+  sourceSelect.title = t('sourceSelectTitle');
+  $('#costBtn').textContent = t('costs');
+}
+
+function currentSource() {
+  return sourceSelect.value;
+}
+
+function withSource(path) {
+  return path + (path.includes('?') ? '&' : '?') + 'source=' + encodeURIComponent(currentSource());
+}
+
+function apiUrl(path) {
+  return apiBaseInput.value.replace(/\/$/, '') + path;
+}
+
+async function apiGet(path) {
+  const res = await fetch(apiUrl(path));
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: res.statusText }));
+    throw new Error(err.error || `HTTP ${res.status}`);
+  }
+  return res.json();
+}
+
+function fmtTs(ms) {
+  if (!ms) return '?';
+  const d = new Date(ms);
+  return d.toLocaleString(t('locale'));
+}
+
+function fmtNum(n) {
+  return (n || 0).toLocaleString(t('locale'));
+}
+
+function fmtCost(x) {
+  return '$' + (Number(x) || 0).toLocaleString(t('locale'), { minimumFractionDigits: 4, maximumFractionDigits: 4 });
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+  }[c]));
+}
+
+const COPY_ICON = '<svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><rect x="5.5" y="5.5" width="8" height="8" rx="1.3"/><path d="M3 10V3.8A1.3 1.3 0 0 1 4.3 2.5H10"/></svg>';
+const CHECK_ICON = '<svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8.5l3 3 7-7"/></svg>';
+
+async function copyText(text, btn) {
+  try {
+    await navigator.clipboard.writeText(text);
+  } catch (e) {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    try { document.execCommand('copy'); } catch (e2) { /* copie impossible, on abandonne silencieusement */ }
+    document.body.removeChild(ta);
+  }
+  if (!btn) return;
+  const original = btn.innerHTML;
+  const originalTitle = btn.title;
+  btn.innerHTML = CHECK_ICON;
+  btn.title = t('copied');
+  btn.classList.add('copied');
+  setTimeout(() => {
+    btn.innerHTML = original;
+    btn.title = originalTitle;
+    btn.classList.remove('copied');
+  }, 1200);
+}
+
+async function loadLanguage() {
+  try {
+    const data = await apiGet('/config');
+    lang = (data.language === 'en') ? 'en' : 'fr';
+  } catch (e) {
+    // endpoint /config absent (ancienne version de l'API) : on garde le français par défaut
+    lang = 'fr';
+  }
+  applyStaticUI();
+}
+
+async function connect() {
+  statusEl.textContent = t('connecting');
+  statusEl.className = '';
+  try {
+    await apiGet('/health');
+    await loadLanguage();
+    statusEl.textContent = t('connected');
+    statusEl.className = 'ok';
+    await loadSources();
+    await loadSummary();
+    await loadSessions();
+  } catch (e) {
+    statusEl.textContent = '● ' + e.message;
+    statusEl.className = 'ko';
+  }
+}
+
+async function loadSources() {
+  try {
+    const data = await apiGet('/sources');
+    const dirs = data.dirs || {};
+    Array.from(sourceSelect.options).forEach(opt => {
+      if (dirs[opt.value]) opt.title = dirs[opt.value];
+    });
+  } catch (e) {
+    // endpoint /sources absent (ancienne version de l'API) : on garde les options par défaut
+  }
+}
+
+async function onSourceChange() {
+  activeSessionId = null;
+  content.innerHTML = `<div class="placeholder">${escapeHtml(t('selectSessionPlaceholder'))}</div>`;
+  await loadSummary();
+  await loadSessions();
+}
+
+async function loadSummary() {
+  const data = await apiGet(withSource('/history'));
+  const period = data.period
+    ? `${fmtTs(data.period.first_ms)} → ${fmtTs(data.period.last_ms)}`
+    : '—';
+  summaryBox.innerHTML = `
+    <div><span>${escapeHtml(t('records'))}</span><b>${data.record_count}</b></div>
+    <div><span>${escapeHtml(t('sessionsTitle'))}</span><b>${data.sessions.length}</b></div>
+    <div><span>${escapeHtml(t('period'))}</span></div>
+    <div style="color:var(--dim);font-size:11px">${escapeHtml(period)}</div>
+  `;
+}
+
+async function loadSessions() {
+  const sessions = await apiGet(withSource('/sessions'));
+  sessionList.innerHTML = '';
+  // plus récentes en premier
+  sessions.slice().reverse().forEach(s => {
+    const div = document.createElement('div');
+    div.className = 'session-item';
+    div.dataset.sid = s.session_id;
+    const badge = s.has_transcript
+      ? `<span class="badge yes">${escapeHtml(t('badgeTranscript'))}</span>`
+      : `<span class="badge no">${escapeHtml(t('badgeNoTranscript'))}</span>`;
+    div.innerHTML = `
+      <div><span class="sid">${escapeHtml(s.session_id.slice(0, 8))}</span>${badge}</div>
+      <div class="meta">${fmtTs(s.first_seen_ms)} · ${escapeHtml(t('promptCount')(s.prompt_count))}</div>
+    `;
+    div.addEventListener('click', () => selectSession(s.session_id, s.has_transcript));
+    sessionList.appendChild(div);
+  });
+}
+
+async function selectSession(sid, hasTranscript) {
+  activeSessionId = sid;
+  document.querySelectorAll('.session-item').forEach(el => {
+    el.classList.toggle('active', el.dataset.sid === sid);
+  });
+
+  if (!hasTranscript) {
+    content.innerHTML = `<div class="placeholder">${escapeHtml(t('noTranscript'))}</div>`;
+    return;
+  }
+
+  content.innerHTML = `
+    <div id="sessionInfo" class="session-info"></div>
+    <div class="toolbar">
+      <label>${escapeHtml(t('toolLabel'))} <input id="toolFilter" type="text" placeholder="${escapeHtml(t('toolPlaceholder'))}"></label>
+      <label><input id="noOutput" type="checkbox"> ${escapeHtml(t('hideOutputs'))}</label>
+      <button id="reloadBtn">${escapeHtml(t('reload'))}</button>
+    </div>
+    <div id="turns"><div class="placeholder">${escapeHtml(t('loading'))}</div></div>
+    <div class="nav-controls">
+      <button id="navPrevBtn" title="${escapeHtml(t('navPrev'))}">↑</button>
+      <button id="navNextBtn" title="${escapeHtml(t('navNext'))}">↓</button>
+      <button id="navEndBtn" title="${escapeHtml(t('navEnd'))}">⤓</button>
+    </div>
+  `;
+  $('#reloadBtn').addEventListener('click', () => renderSessionDetail(sid));
+  $('#toolFilter').addEventListener('keydown', e => { if (e.key === 'Enter') renderSessionDetail(sid); });
+  $('#noOutput').addEventListener('change', () => renderSessionDetail(sid));
+  $('#navPrevBtn').addEventListener('click', () => scrollToAdjacentHuman(-1));
+  $('#navNextBtn').addEventListener('click', () => scrollToAdjacentHuman(1));
+  $('#navEndBtn').addEventListener('click', () => scrollToEnd());
+
+  await renderSessionDetail(sid);
+}
+
+async function renderSessionDetail(sid) {
+  const turnsEl = $('#turns');
+  const tool = $('#toolFilter').value.trim();
+  const noOutput = $('#noOutput').checked;
+
+  let path = `/sessions/${sid}`;
+  const params = ['source=' + encodeURIComponent(currentSource())];
+  if (tool) params.push('tool=' + encodeURIComponent(tool));
+  if (noOutput) params.push('no_output=1');
+  path += '?' + params.join('&');
+
+  turnsEl.innerHTML = `<div class="placeholder">${escapeHtml(t('loading'))}</div>`;
+  try {
+    const data = await apiGet(path);
+    renderSessionInfo(data);
+    turnsEl.innerHTML = '';
+    data.turns.forEach(turn => turnsEl.appendChild(renderTurn(turn)));
+    if (!data.turns.length) {
+      turnsEl.innerHTML = `<div class="placeholder">${escapeHtml(t('noTurns'))}</div>`;
+    }
+  } catch (e) {
+    turnsEl.innerHTML = `<div class="placeholder ko">${escapeHtml(t('error'))}${escapeHtml(e.message)}</div>`;
+  }
+}
+
+function renderSessionInfo(data) {
+  const infoEl = $('#sessionInfo');
+  if (!infoEl) return;
+
+  const path = data.transcript_path || data.transcript_file || '';
+  const u = data.usage || {};
+
+  infoEl.innerHTML = `
+    <div class="session-path"><span class="label">${escapeHtml(t('fileLabel'))}</span> ${escapeHtml(path)}</div>
+    <div class="token-stats">
+      <span class="token-chip total" title="${escapeHtml(t('tokenTotalTitle'))}">${escapeHtml(t('tokenTotal'))} <b>${fmtNum(u.total_tokens)}</b></span>
+      <span class="token-chip" title="${escapeHtml(t('tokenInputTitle'))}">${escapeHtml(t('tokenInput'))} <b>${fmtNum(u.input_tokens)}</b></span>
+      <span class="token-chip" title="${escapeHtml(t('tokenOutputTitle'))}">${escapeHtml(t('tokenOutput'))} <b>${fmtNum(u.output_tokens)}</b></span>
+      <span class="token-chip" title="${escapeHtml(t('tokenCacheReadTitle'))}">${escapeHtml(t('tokenCacheRead'))} <b>${fmtNum(u.cache_read_input_tokens)}</b></span>
+      <span class="token-chip" title="${escapeHtml(t('tokenCacheWriteTitle'))}">${escapeHtml(t('tokenCacheWrite'))} <b>${fmtNum(u.cache_creation_input_tokens)}</b></span>
+    </div>
+  `;
+}
+
+function scrollToEnd() {
+  const turnsEl = $('#turns');
+  if (turnsEl && turnsEl.lastElementChild) {
+    turnsEl.lastElementChild.scrollIntoView({ behavior: 'smooth', block: 'end' });
+  } else {
+    content.scrollTo({ top: content.scrollHeight, behavior: 'smooth' });
+  }
+}
+
+function scrollToAdjacentHuman(direction) {
+  const turnsEl = $('#turns');
+  if (!turnsEl) return;
+  const elements = Array.from(turnsEl.querySelectorAll('.turn.human'));
+  if (!elements.length) return;
+
+  const containerTop = content.getBoundingClientRect().top;
+  const EPS = 4; // tolérance en px pour ne pas rester bloqué sur le tour déjà en haut
+
+  let target;
+  if (direction > 0) {
+    target = elements.find(el => (el.getBoundingClientRect().top - containerTop) > EPS);
+  } else {
+    const above = elements.filter(el => (el.getBoundingClientRect().top - containerTop) < -EPS);
+    target = above[above.length - 1];
+  }
+  if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function renderTurn(turn) {
+  const wrap = document.createElement('div');
+  wrap.className = 'turn';
+
+  if (turn.role === 'human') {
+    wrap.classList.add('human');
+    let costLine = '';
+    if (turn.category) {
+      const extra = (turn.agents || turn.commands)
+        ? ` · ${turn.agents || 0} agents · ${turn.commands || 0} cmd` : '';
+      costLine = `<div class="turn-cost" title="${escapeHtml(t('turnCostTitle'))}">`
+        + `<span class="cost-badge" style="color:${catColor(turn.category)};border-color:${catColor(turn.category)}">${escapeHtml(catLabel(turn.category))}</span>`
+        + ` · <b>${fmtCost(turn.cost)}</b>${escapeHtml(extra)}</div>`;
+    }
+    wrap.innerHTML = `
+      <div class="turn-head">[${fmtTs(turn.timestamp)}] <span class="who human">${escapeHtml(t('human'))} #${turn.turn}</span></div>
+      ${costLine}
+      <div class="bubble"><button class="copy-btn" title="${escapeHtml(t('copy'))}">${COPY_ICON}</button>${escapeHtml(turn.text)}</div>
+    `;
+    wrap.querySelector('.copy-btn').addEventListener('click', e => { e.stopPropagation(); copyText(turn.text, e.currentTarget); });
+    return wrap;
+  }
+
+  if (turn.role === 'command') {
+    if (turn.kind === 'invocation') {
+      const label = turn.args ? `${turn.name} ${turn.args}` : turn.name;
+      wrap.innerHTML = `
+        <div class="turn-head">[${fmtTs(turn.timestamp)}] <span class="who command">${escapeHtml(label)}</span></div>
+      `;
+    } else {
+      wrap.innerHTML = `
+        <div class="turn-head">[${fmtTs(turn.timestamp)}] <span class="who command">${escapeHtml(t('commandOutput'))}</span></div>
+        <div class="bubble"><button class="copy-btn" title="${escapeHtml(t('copy'))}">${COPY_ICON}</button>${escapeHtml(turn.text)}</div>
+      `;
+      wrap.querySelector('.copy-btn').addEventListener('click', e => { e.stopPropagation(); copyText(turn.text, e.currentTarget); });
+    }
+    return wrap;
+  }
+
+  const head = document.createElement('div');
+  head.className = 'turn-head';
+  head.innerHTML = `[${fmtTs(turn.timestamp)}] <span class="who assistant">ASSISTANT</span>`;
+  wrap.appendChild(head);
+
+  const bubble = document.createElement('div');
+  bubble.className = 'bubble';
+  bubble.style.display = 'flex';
+  bubble.style.flexDirection = 'column';
+  bubble.style.gap = '8px';
+
+  (turn.blocks || []).forEach(block => {
+    const b = document.createElement('div');
+    b.className = 'block';
+
+    if (block.type === 'thinking_encrypted') {
+      b.innerHTML = `<div class="block-thinking">${escapeHtml(t('thinkingEncrypted'))}</div>`;
+    } else if (block.type === 'thinking') {
+      b.innerHTML = `<div class="block-thinking">${escapeHtml(block.text)}</div>`;
+    } else if (block.type === 'text') {
+      b.style.position = 'relative';
+      b.style.paddingRight = '30px';
+      b.innerHTML = `<button class="copy-btn" title="${escapeHtml(t('copy'))}">${COPY_ICON}</button>`;
+      b.appendChild(document.createTextNode(block.text));
+      b.querySelector('.copy-btn').addEventListener('click', e => { e.stopPropagation(); copyText(block.text, e.currentTarget); });
+    } else if (block.type === 'tool_use') {
+      const bt = document.createElement('div');
+      bt.className = 'block-tool';
+      const inputStr = JSON.stringify(block.input, null, 2);
+      const outputStr = block.output !== undefined ? block.output : null;
+      bt.innerHTML = `
+        <div class="tool-head">
+          <span>${escapeHtml(block.tool)}</span><span>▾</span>
+        </div>
+        <div class="tool-body">
+          <pre class="tool-input">${escapeHtml(inputStr)}</pre>
+          ${outputStr !== null ? `<div class="tool-output">${escapeHtml(outputStr.slice(0, 8000))}${outputStr.length > 8000 ? escapeHtml(t('truncated')) : ''}</div>` : ''}
+        </div>
+      `;
+      bt.querySelector('.tool-head').addEventListener('click', () => bt.classList.toggle('open'));
+      b.appendChild(bt);
+    }
+    bubble.appendChild(b);
+  });
+
+  wrap.appendChild(bubble);
+  return wrap;
+}
+
+async function renderCostDashboard() {
+  document.querySelectorAll('.session-item').forEach(el => el.classList.remove('active'));
+  activeSessionId = null;
+  content.innerHTML = `<div class="placeholder">${escapeHtml(t('loading'))}</div>`;
+  try {
+    const d = await apiGet(withSource('/cost'));
+    const tot = d.totals || {};
+    const note = d.pricing_source === 'config'
+      ? `<div class="pricing-note">${escapeHtml(t('pricingConfig'))}</div>`
+      : `<div class="pricing-note warn">${escapeHtml(t('pricingDefault'))}</div>`;
+    const kpi = (label, val, cls = '') =>
+      `<div class="kpi ${cls}"><div class="k-label">${escapeHtml(label)}</div><div class="k-val">${val}</div></div>`;
+
+    const rowsType = (d.categories || []).filter(c => d.by_type && d.by_type[c]).map(c => {
+      const v = d.by_type[c];
+      return `<tr><td><span class="cost-badge" style="color:${catColor(c)};border-color:${catColor(c)}">${escapeHtml(catLabel(c))}</span></td>`
+        + `<td class="num">${fmtNum(v.turns)}</td><td class="num">${fmtNum(v.tokens)}</td><td class="num">${fmtCost(v.cost)}</td></tr>`;
+    }).join('');
+
+    const rowsModel = Object.entries(d.by_model || {}).map(([m, v]) =>
+      `<tr><td>${escapeHtml(m)}</td><td class="num">${fmtNum(v.turns)}</td><td class="num">${fmtNum(v.tokens)}</td><td class="num">${fmtCost(v.cost)}</td></tr>`).join('');
+
+    const rowsSession = (d.per_session || []).slice().reverse().map(s =>
+      `<tr><td><span class="sid" data-sid="${escapeHtml(s.session_id)}">${escapeHtml(s.session_id.slice(0, 8))}</span></td>`
+      + `<td class="num">${fmtNum(s.turns)}</td><td class="num">${fmtNum(s.agents)}</td>`
+      + `<td class="num">${fmtNum(s.commands)}</td><td class="num">${fmtCost(s.cost)}</td></tr>`).join('');
+
+    const table = (head, rows) =>
+      `<table class="cost-table"><thead><tr>${head}</tr></thead><tbody>${rows}</tbody></table>`;
+    const numTh = k => `<th class="num">${escapeHtml(t(k))}</th>`;
+
+    content.innerHTML = `
+      <div class="cost-dash">
+        <h2>${escapeHtml(t('costsTitle'))}</h2>
+        ${note}
+        <div class="cost-kpis">
+          ${kpi(t('kpiCost'), fmtCost(tot.cost), 'total')}
+          ${kpi(t('kpiQuestions'), fmtNum(tot.turns))}
+          ${kpi(t('kpiTokens'), fmtNum(tot.tokens))}
+          ${kpi(t('kpiAgents'), fmtNum(tot.agents))}
+          ${kpi(t('kpiCommands'), fmtNum(tot.commands))}
+          ${kpi(t('kpiSessions'), fmtNum(tot.sessions))}
+        </div>
+        <div class="pricing-note">${escapeHtml(t('costInOut')(tot.cost_input, tot.cost_output))}</div>
+        <div class="cost-h">${escapeHtml(t('byType'))}</div>
+        ${table(`<th>${escapeHtml(t('colType'))}</th>${numTh('colTurns')}${numTh('colTokens')}${numTh('colCost')}`, rowsType)}
+        <div class="cost-h">${escapeHtml(t('byModel'))}</div>
+        ${table(`<th>${escapeHtml(t('colModel'))}</th>${numTh('colTurns')}${numTh('colTokens')}${numTh('colCost')}`, rowsModel)}
+        <div class="cost-h">${escapeHtml(t('bySession'))}</div>
+        ${table(`<th>${escapeHtml(t('colSession'))}</th>${numTh('colTurns')}${numTh('colAgents')}${numTh('colCommands')}${numTh('colCost')}`, rowsSession)}
+      </div>`;
+
+    // clic sur un id de session → ouvre son détail (coûts par question inline)
+    content.querySelectorAll('.cost-table .sid').forEach(el => {
+      el.style.cursor = 'pointer';
+      el.addEventListener('click', () => selectSession(el.dataset.sid, true));
+    });
+  } catch (e) {
+    content.innerHTML = `<div class="placeholder ko">${escapeHtml(t('error'))}${escapeHtml(e.message)}</div>`;
+  }
+}
+
+applyStaticUI();
+
+$('#connectBtn').addEventListener('click', connect);
+$('#costBtn').addEventListener('click', renderCostDashboard);
+apiBaseInput.addEventListener('keydown', e => { if (e.key === 'Enter') connect(); });
+sourceSelect.addEventListener('change', onSourceChange);
+
+// tentative de connexion automatique au chargement
+connect();
+</script>
+</body>
+</html>

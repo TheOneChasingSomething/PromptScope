@@ -1,0 +1,26 @@
+{
+  "auto_backup": true,
+  "backup_dir": "session_backups",
+  "language": "en",
+
+  "_pricing_comment": "USD par million de tokens. EXEMPLES (multiplicateurs de cache standard : write ~1.25x input, read ~0.1x input). À vérifier/ajuster : https://platform.claude.com/docs/en/about-claude/pricing . Clé = préfixe de la chaîne model (correspondance par préfixe le plus long).",
+  "pricing": {
+    "claude-opus-4":    { "input": 15.0, "output": 75.0, "cache_write": 18.75, "cache_read": 1.50 },
+    "claude-sonnet-4":  { "input": 3.0,  "output": 15.0, "cache_write": 3.75,  "cache_read": 0.30 },
+    "claude-haiku-4":   { "input": 1.0,  "output": 5.0,  "cache_write": 1.25,  "cache_read": 0.10 },
+    "claude-3-5-haiku": { "input": 0.80, "output": 4.0,  "cache_write": 1.00,  "cache_read": 0.08 },
+    "default":          { "input": 3.0,  "output": 15.0, "cache_write": 3.75,  "cache_read": 0.30 }
+  },
+
+  "_classification_comment": "Mots-clés (secondaires) par type de question. Le signal primaire reste les outils appelés (Write/Edit -> code_writing, Read/Grep -> code_analysis, WebSearch/WebFetch -> web_deepsearch, Task -> agent_launch). Vide = repli technical_conversation.",
+  "classification": {
+    "keywords": {
+      "code_writing": ["écris", "implémente", "ajoute", "crée une fonction", "corrige", "refactor", "write", "implement", "fix the"],
+      "code_analysis": ["analyse", "revue", "review", "explique ce code", "audit", "que fait", "vulnérab", "explain this code"],
+      "tool_onboarding": ["comment utiliser", "documentation", "installe", "configurer", "prise en main", "how to use", "setup", "getting started", "docs"],
+      "web_deepsearch": ["cherche sur le web", "recherche web", "deepsearch", "search the web", "sur internet"],
+      "agent_launch": ["lance des agents", "sous-agent", "subagent", "en parallèle", "plusieurs agents"],
+      "technical_conversation": []
+    }
+  }
+}
