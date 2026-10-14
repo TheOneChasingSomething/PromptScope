@@ -15,3 +15,9 @@ SHA256SUMS.asc
 # OS / editor
 .DS_Store
 *.swp
+
+out/
+node_modules/
+*.vsix
+.vscode-test/
+*.sqlite
