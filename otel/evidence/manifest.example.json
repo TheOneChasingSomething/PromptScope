@@ -1,0 +1,21 @@
+{
+  "run_id": "run-20261013-001",
+  "sealed_at_utc": "2026-10-13T16:40:00Z",
+  "experiment": {
+    "task": "inputs/task.md",
+    "agent_profile": "build",
+    "opencode_version": "1.19.0",
+    "opencode_cli_generation": "v1",
+    "skill_version": "v8-patch-to-poc_SKILL@<ref>",
+    "references_provided": ["references/jolivet-v8-exploitation.pdf"],
+    "note": "A provided file is not proof it was read; conditions describe availability, not use."
+  },
+  "files": [
+    {"path": "inputs/task.md", "size": 184, "sha256": "<hex>", "origin": "operator"},
+    {"path": "events/opencode.jsonl", "size": 51234, "sha256": "<hex>", "origin": "opencode_plugin"},
+    {"path": "events/opencode-harness.log", "size": 90112, "sha256": "<hex>", "origin": "opencode_harness"},
+    {"path": "sessions/main.json", "size": 40211, "sha256": "<hex>", "origin": "agent_report"},
+    {"path": "artifacts/tool-outputs/call-17.stdout", "size": 2048, "sha256": "<hex>", "origin": "trusted_tool_executor"},
+    {"path": "telemetry/traces.sanitized.jsonl", "size": 10240, "sha256": "<hex>", "origin": "collector_sanitized"}
+  ]
+}

@@ -1,0 +1,17 @@
+# Python
+__pycache__/
+*.py[cod]
+
+# Analyzer runtime output
+session_backups/
+
+# Evidence / OTel runtime (never commit collected data or sealed archives)
+otel/evidence-staging/
+evidence-staging/
+*.tar.gpg
+SHA256SUMS
+SHA256SUMS.asc
+
+# OS / editor
+.DS_Store
+*.swp

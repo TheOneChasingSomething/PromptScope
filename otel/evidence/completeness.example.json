@@ -1,0 +1,11 @@
+{
+  "run_id": "run-20261013-001",
+  "execution_status": "interrupted",
+  "task_result": "not_evaluated",
+  "collection_status": "partial",
+  "opencode_cli_generation": "v1",
+  "missing_items": [
+    "Final output for tool call 17",
+    "Export of one child session"
+  ]
+}

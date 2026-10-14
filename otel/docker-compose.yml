@@ -1,0 +1,56 @@
+# OpenTelemetry layer for the analyze_jsonl project.
+#
+# Pipeline:
+#   opencode --(OTLP/HTTP)--> otel-collector --(redaction)--> phoenix
+#
+# The collector is the control point: it receives raw OTLP from opencode,
+# scrubs secrets/flags out of span values, then forwards clean traces to a
+# self-hosted Phoenix instance. Everything stays on localhost.
+#
+# Start:   docker compose -f otel/docker-compose.yml up -d
+# Stop:    docker compose -f otel/docker-compose.yml down
+# Phoenix UI: http://localhost:6006
+
+name: analyze-jsonl-otel
+
+services:
+  # --- Arize Phoenix: self-hosted trace store + eval workbench -------------
+  # Reused later for RAG tracing/evaluation during the thesis.
+  phoenix:
+    image: arizephoenix/phoenix:latest
+    container_name: phoenix
+    restart: unless-stopped
+    ports:
+      - "6006:6006"          # UI + OTLP/HTTP ingest endpoint (/v1/traces)
+      # - "4317:4317"        # Phoenix OTLP/gRPC ingest (left internal; the
+      #                      # collector reaches Phoenix over the compose network)
+    environment:
+      # Local persistence via SQLite under the working dir (see volume below).
+      # For PostgreSQL instead, set PHOENIX_SQL_DATABASE_URL and drop the volume.
+      PHOENIX_WORKING_DIR: /data
+    volumes:
+      - phoenix-data:/data
+
+  # --- OpenTelemetry Collector (contrib): receive -> redact -> export -----
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:latest
+    container_name: otel-collector
+    restart: unless-stopped
+    command: ["--config=/etc/otelcol/config.yaml"]
+    volumes:
+      - ./otel-collector-config.yaml:/etc/otelcol/config.yaml:ro
+      # Evidence staging: a collector-only volume. It is NOT mounted into any
+      # agent container, and a Docker-managed volume is not writable by the host
+      # account that runs opencode — that is the separation the spec requires.
+      # The supervisor copies CLOSED files out to the protected archive.
+      - evidence-staging:/evidence-staging
+    ports:
+      - "4318:4318"          # OTLP/HTTP receiver  <- opencode points here
+      - "4317:4317"          # OTLP/gRPC receiver  (optional alternative)
+    depends_on:
+      - phoenix
+
+volumes:
+  phoenix-data:
+  evidence-staging:
+

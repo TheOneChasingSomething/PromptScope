@@ -1,0 +1,126 @@
+# OpenTelemetry Collector (contrib) configuration.
+#
+# Role: receive OTLP from opencode, strip secrets/flags from span values,
+#       batch, and export clean traces to the self-hosted Phoenix instance.
+#
+# Validate before running:   otelcol-contrib validate --config=otel-collector-config.yaml
+# (or let `docker compose up` surface config errors on first start)
+
+# ---------------------------------------------------------------------------
+# RECEIVERS — where telemetry comes in
+# ---------------------------------------------------------------------------
+receivers:
+  otlp:
+    protocols:
+      http:
+        endpoint: 0.0.0.0:4318   # opencode -> http://localhost:4318/v1/traces
+      grpc:
+        endpoint: 0.0.0.0:4317   # optional gRPC alternative
+
+# ---------------------------------------------------------------------------
+# PROCESSORS — run in the order listed in the pipeline below
+# ---------------------------------------------------------------------------
+processors:
+  # Guardrail: refuse to balloon memory under a burst of spans.
+  memory_limiter:
+    check_interval: 1s
+    limit_percentage: 80
+    spike_limit_percentage: 25
+
+  # SECRET / FLAG REDACTION.
+  # Value-pattern based on purpose: it masks any attribute VALUE matching a
+  # pattern, regardless of the attribute key the opencode plugin chose. This
+  # is what keeps CTF flags and credentials out of stored traces.
+  redaction:
+    allow_all_keys: true          # keep every key; only mask matching values
+    blocked_values:
+      # --- CTF flags (Hackropole and generic) ---
+      - "(?i)flag\\{[^}]*\\}"
+      - "(?i)hackropole\\{[^}]*\\}"
+      - "[A-Z0-9_]{2,}\\{[^}]{4,}\\}"
+      # --- API keys / tokens ---
+      - "sk-ant-[A-Za-z0-9_-]{20,}"      # Anthropic
+      - "sk-[A-Za-z0-9]{20,}"            # OpenAI-style
+      - "AKIA[0-9A-Z]{16}"               # AWS access key id
+      - "(?i)bearer\\s+[A-Za-z0-9._-]{20,}"
+      - "gh[pousr]_[A-Za-z0-9]{36,}"     # GitHub tokens
+      # --- Private keys ---
+      - "-----BEGIN (?:RSA |EC |OPENSSH |DSA )?PRIVATE KEY-----"
+    # Masked values are replaced with "****". To keep correlation without the
+    # cleartext, hash instead: uncomment the next line.
+    # hash_function: sha256
+    summary: debug                # emits redaction counts on collector logs
+
+  # OPTIONAL — drop raw prompt/response bodies entirely (defence in depth).
+  # OpenInference puts message content in attributes like input.value /
+  # output.value. Uncomment to remove them before storage. OTTL syntax can
+  # vary by collector version — validate after enabling.
+  # transform:
+  #   error_mode: ignore
+  #   trace_statements:
+  #     - context: span
+  #       statements:
+  #         - delete_key(attributes, "input.value")
+  #         - delete_key(attributes, "output.value")
+
+  # Batch for efficient export.
+  batch:
+    timeout: 2s
+    send_batch_size: 512
+
+# ---------------------------------------------------------------------------
+# EXPORTERS — where telemetry goes out
+# ---------------------------------------------------------------------------
+exporters:
+  # Clean traces -> Phoenix (OTLP/HTTP). Explicit traces endpoint keeps this
+  # independent of logs/metrics, which Phoenix does not ingest.
+  otlphttp/phoenix:
+    traces_endpoint: http://phoenix:6006/v1/traces
+    tls:
+      insecure: true            # local compose network, no TLS
+
+  # SANITIZED TELEMETRY COPY (evidence staging).
+  # A second sink on the SAME traces pipeline: because processors run once per
+  # pipeline, this file receives data AFTER redaction/batch — it is a sanitized
+  # copy, never the restricted reference archive. One JSON line per OTLP batch,
+  # not per span. Written to a collector-only volume the agent cannot reach;
+  # the supervisor copies CLOSED files out to the protected archive.
+  #
+  # Caveats (fileexporter, current docs): no fsync, and no sending_queue /
+  # retry_on_failure support — an abrupt stop can lose the tail. This is a
+  # delivery copy, not a durable evidence store. Validate option names against
+  # the image actually deployed (checked here against otelcol-contrib 0.116.0).
+  file/evidence:
+    path: /evidence-staging/telemetry/traces.sanitized.jsonl
+    format: json
+    append: true
+    flush_interval: 1s
+
+  # Stdout fallback for signals Phoenix ignores (and for debugging).
+  debug:
+    verbosity: normal
+
+# ---------------------------------------------------------------------------
+# SERVICE — wire receivers -> processors -> exporters
+# ---------------------------------------------------------------------------
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, redaction, batch]
+      # file/evidence sits AFTER the redaction processor (same pipeline), so the
+      # evidence copy is sanitized. Phoenix is kept; multiple exporters allowed.
+      exporters: [otlphttp/phoenix, file/evidence]
+    # opencode may also emit logs/metrics; Phoenix is traces-only, so these
+    # go to stdout. Point them at another OTLP backend later if you want.
+    logs:
+      receivers: [otlp]
+      processors: [memory_limiter, redaction, batch]
+      exporters: [debug]
+    metrics:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [debug]
+  telemetry:
+    logs:
+      level: info
